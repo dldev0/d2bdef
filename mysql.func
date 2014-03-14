@@ -1,0 +1,202 @@
+#
+#	mysqldump 备份函数
+#
+#		by nbsp@outlook.com
+#
+
+f_mysql()
+
+{
+
+#host
+
+local ho=$1
+
+#port	
+
+local po=$2
+
+#user
+
+local us=$3
+
+#passwd
+
+local pa=$4
+
+# dbname:tables
+
+local d=$5
+	
+local dn=`echo $d | awk -F\: '{print $1}'`	
+
+local dt=`echo $d | awk -F\: '{print $2}'`	
+
+local dt=${dt//,/ }
+
+#backup path
+	
+local bp=$6
+	
+#expire
+
+local ex=$7
+
+local ch=$8
+
+#检测服务器端口
+
+nc -n -w 3 -vz "$ho" "$po" && \
+dumpData "$ho" "$po" "$us" "$pa" "$dn" "$dt" "$bp" "$ch"
+
+if [ "$?" == "1" ] ; then
+
+	log 'f' "$ho connecting failed"
+
+fi
+
+}
+
+#备份
+
+dumpData()
+
+{
+
+local ho=$1
+
+local po=$2
+
+local us=$3
+
+local pa=$4
+
+local dn=$5
+
+local dt=$6
+
+local bp=$7
+
+local ch=$8
+
+
+#判断配置mysqldump是否存在
+
+[ ! -f "$dump" ] && dump=mysqldump
+
+[ ! -x "$dump" ] && die "$dump not executed"
+
+
+local dumping="$dump -h$ho -P$po -u$us -p$pa --default-character-set=$ch"
+
+#排除表逻辑
+#排除表 START
+
+if [ "${dn:0:1}" == "!" ];then
+
+	for i in $dt;do
+
+		local ig=" --ignore-table=${dn:1}.${i} "$ig
+
+	done
+
+	dn=${dn:1}
+
+	#备份目录位置
+
+	bpd="$bp"/"$ho"/"${dn}"
+
+	[ ! -d "$bpd" ] && mkdir -p $bpd
+	
+	fname=mysql_`date +%Y%m%d`_"$dn"_EX_"${dt// /_}".sql
+
+	$dumping "$dn" $ig > "$bpd"/"$fname"
+
+        if [ "$?" == "0" ] ; then
+         
+       		mess="$ho $dn - EX ${dt// /_}  - DUMP SUCCESS"
+
+         	log 's' "$mess"
+        else
+
+                 [ -f "${bpd}/${fname}" ] && rm -f "${bpd}/${fname}"
+
+                 [ $(ls -A $bpd | wc -w) = 0 ] && rm -rf $bpt
+
+                 mess="$ho $dn - EX$extab - DUMP FAILED"
+
+                 log 'f' "$mess"
+        fi
+
+#排除表 END
+
+else
+
+        #备份目录位置
+
+        bpd="$bp"/"$ho"/"${dn}"
+
+        [ ! -d "$bpd" ] && mkdir -p $bpd
+	
+#备份整个数据库 START
+
+	if [ -z "$dt" ];then
+
+		fname=mysql_`date +%Y%m%d`_"$dn".sql
+
+		$dumping "$dn" > "$bpd"/"$fname"
+
+		if [ "$?" == "0" ] ; then
+
+        		mess="$ho $dn  - DUMP SUCCESS"
+
+			log 's' "$mess"
+		else
+	
+			[ -f "${bpd}/${fname}" ] && rm -f "${bpd}/${fname}"	
+
+			[ $(ls -A $bpd | wc -w) = 0 ] && rm -rf $bpd
+
+       		 	mess="$ho $dn - DUMP FAILED"
+        
+			log 'f' "$mess"
+		fi
+	
+#备份整个数据库 END
+
+	else
+
+#备份设定的表 START
+
+	for i in ${dt};do
+
+		fname=mysql_`date +%Y%m%d`_"$dn"_"$i".sql
+
+		$dumping "$dn" "$i" > "$bpd"/"$fname"
+
+		if [ "$?" == "0" ] ; then
+
+        		mess="$ho $dn - $i - DUMP SUCCESS"
+        
+			log 's' "$mess"
+		else
+	
+			[ -f "${bpd}/${fname}" ] && rm -f "${bpd}/${fname}"	
+	
+			[ $(ls -A $bpd | wc -w) = 0 ] && rm -rf $bpt
+
+        		mess="$ho $dn - $i - DUMP FAILED"
+	
+			log 'f' "$mess"
+		fi
+	
+	done
+
+
+#备份设定的表 END
+
+	fi
+
+fi
+
+}

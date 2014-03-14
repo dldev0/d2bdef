@@ -1,0 +1,230 @@
+#
+#	公共函数
+#
+#
+#
+
+#检查是否指定目录文件过期
+
+check_expire()
+
+{
+
+#数据类型
+
+local dt=$1
+
+#主机IP
+
+local dh=$2
+
+#备份路径
+
+local ba=$3
+
+#数据库
+
+local da=`echo $4 | awk -F\: '{print $1}'`
+
+local ta=`echo $4 | awk -F\: '{print $2}'`
+
+
+
+
+
+#过期时间
+
+local ex=$5
+
+
+if [ "${da:0:1}"  == "!" ] ;then
+
+	da=${da:1}
+
+	local realpath="$ba"/"$dh"/"${da}"
+
+	local file="${dt}_*_${da}_EX_${ta// /_}.sql"
+
+	grep_file "$realpath" "$file" "$ex"
+
+else
+
+	local realpath="$ba"/"$dh"/"$da"
+
+	if [ -z "$ta" ] ; then
+
+		local file="${dt}_*_${da}.sql"
+
+		grep_file "$realpath" "$file" "$ex"
+	
+	else
+
+
+	for i in ${ta} ; do
+
+		local file="${dt}_*_${da}_${i}.sql"
+
+		grep_file "$realpath" "$file" "$ex"
+
+	done
+
+	fi
+
+fi
+
+}
+
+grep_file()
+
+{
+
+local dirpath=$1
+
+local file=$2
+
+local expire=$3
+
+#删除操作
+
+if [ -d "$dirpath" ] ; then
+
+find "$dirpath" -mtime +"$expire" -type f -name "$file" -exec rm -f {} \;
+
+fi
+
+}
+
+#日志文件函数
+
+log()
+
+{
+
+if [ -f "$log_file" ] ; then
+
+touch $log_file
+
+fi
+
+# 五个状态 
+# 成功:SUC:s
+# 失败:FAL:f
+# 信息:MES:m
+# 开始:STR:start
+# 结束:END:end
+
+local stat=$1
+
+local mess=$2
+
+case "$stat" in
+
+"s")
+
+mess="[ SUC `date "$date_format"` ] $mess "
+
+if [ -z "$scontent" ];then
+
+scontent="$mess"
+
+else
+
+scontent="$scontent\n$mess"
+
+fi
+
+scount=`expr \( $scount + 1 \)`
+
+echo "$mess" >> $log_file
+
+;;
+
+"f")
+
+mess="[ FAL `date "$date_format"` ] $mess "
+
+if [ -z "$fcontent" ];then
+
+fcontent="$mess"
+
+else
+
+fcontent="$fcontent\n$mess"
+
+fi
+
+fcount=`expr \( $fcount + 1 \)`
+
+echo "$mess" >> $log_file
+
+;;
+
+"m")
+
+echo "[ MES `date "$date_format"` ] $mess " >> $log_file
+
+;;
+
+"start")
+
+echo '------------------------------------------------------------' >> $log_file
+
+echo "[ STA `date "$date_format"` ]" >> $log_file
+
+;;
+
+"end")
+
+echo "[ END `date "$date_format"` ] runtime $result" >> $log_file
+
+;;
+
+esac
+
+}
+
+#邮件报告函数
+
+send_mail()
+
+{
+
+local list=$1	
+
+local t=$2
+
+local c=$3
+
+while read i;do
+	
+if [ "${i:0:1}" != "#" ];then
+
+	if [ -n "$i" ];then
+
+		echo -e "$c" | mail -s "$t" "$i" && echo -e "[ MAL `date "$date_format"` ] system has been sent email to $i" >> $log_file
+
+	fi
+
+fi
+
+done < $list
+
+}
+
+
+timer()
+{
+
+local start=$1
+
+local end=$2
+
+local rtime=$(expr $end - $start)
+
+[ "$rtime" -le "60" ] && result="$rtime s"
+
+[ "$rtime" -ge "60" ] && result="$(expr $rtime / 60) m"
+
+[ "$rtime" -ge "3600" ] && result="$(expr $rtime / 3600) h"
+
+}
